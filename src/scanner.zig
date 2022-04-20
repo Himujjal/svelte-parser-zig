@@ -51,8 +51,6 @@ pub const Token = struct {
     }
 };
 
-const p_aa = std.heap.page_allocator;
-
 pub const Scanner = struct {
     const Self = @This();
 
@@ -71,7 +69,7 @@ pub const Scanner = struct {
         errors: ArrayList(Error),
         warnings: ArrayList(Error),
     ) Self {
-        var i_aa_wr = p_aa.create(ArenaAllocator) catch unreachable;
+        var i_aa_wr = allocator.create(ArenaAllocator) catch unreachable;
         i_aa_wr.* = ArenaAllocator.init(allocator);
 
         return Self{
@@ -97,6 +95,7 @@ pub const Scanner = struct {
 
     // Only for debugging purposes
     pub fn printTokens(self: *Self) void {
+        std.debug.print("\n", .{});
         for (self.tokens.items) |token| {
             _ = token.toString(self.i_all, self.code);
         }
@@ -112,10 +111,94 @@ pub const Scanner = struct {
 
     pub fn deinitInternal(self: *Self) void {
         self.i_aa.deinit();
-        p_aa.destroy(self.i_aa);
+        self.allocator.destroy(self.i_aa);
     }
 
     pub fn deinit(self: *Self) void {
         self.tokens.deinit();
     }
+};
+
+// All the Token States
+const TokenState = enum {
+    Data,
+    RCDATA,
+    RAWTEXT,
+    ScriptData,
+    PLAINTEXT,
+    TagOpen,
+    EndTagOpen,
+    TagName,
+    RCDATALessThanSign,
+    RCDATAEndTagOpen,
+    RCDATAEndTagName,
+    RAWTEXTLessThanSign,
+    RAWTEXTEndTagOpen,
+    RAWTEXTEndTagName,
+    ScriptDataLessThanSign,
+    ScriptDataEndTagOpen,
+    ScriptDataEndTagName,
+    ScriptDataEscapeStart,
+    ScriptDataEscapeStartDash,
+    ScriptDataEscaped,
+    ScriptDataEscapedDash,
+    ScriptDataEscapedDashDash,
+    ScriptDataEscapedLessThanSign,
+    ScriptDataEscapedEndTagOpen,
+    ScriptDataEscapedEndTagName,
+    ScriptDataDoubleEscapeStart,
+    ScriptDataDoubleEscaped,
+    ScriptDataDoubleEscapedDash,
+    ScriptDataDoubleEscapedDashDash,
+    ScriptDataDoubleEscapedLessThanSign,
+    ScriptDataDoubleEscapeEnd,
+    BeforeAttributeName,
+    AttributeName,
+    AfterAttributeName,
+    BeforeAttributeValue,
+    AttributeValueDoubleQuoted,
+    AttributeValueSingleQuoted,
+    AttributeValueUnquoted,
+    AfterAttributeValueQuoted,
+    SelfClosingStartTag,
+    BogusComment,
+    MarkupDeclarationOpen,
+    CommentStart,
+    CommentStartDash,
+    Comment,
+    CommentLessThanSign,
+    CommentLessThanSignBang,
+    CommentLessThanSignBangDash,
+    CommentLessThanSignBangDashDash,
+    CommentEndDash,
+    CommentEnd,
+    CommentEndBang,
+    DOCTYPE,
+    BeforeDOCTYPEName,
+    DOCTYPEName,
+    AfterDOCTYPEName,
+    AfterDOCTYPEPublicKeyword,
+    BeforeDOCTYPEPublicIdentifier,
+    DOCTYPEPublicIdentifierDoubleQuoted,
+    DOCTYPEPublicIdentifierSingleQuoted,
+    AfterDOCTYPEPublicIdentifier,
+    BetweenDOCTYPEPublicAndSystemIdentifiers,
+    AfterDOCTYPESystemKeyword,
+    BeforeDOCTYPESystemIdentifier,
+    DOCTYPESystemIdentifierDoubleQuoted,
+    DOCTYPESystemIdentifierSingleQuoted,
+    AfterDOCTYPESystemIdentifier,
+    BogusDOCTYPE,
+    CDATASection,
+    CDATASectionBracket,
+    CDATASectionEnd,
+    CharacterReference,
+    NamedCharacterReference,
+    AmbiguousAmpersand,
+    NumericCharacterReference,
+    HexadecimalCharacterReferenceStart,
+    DecimalCharacterReferenceStart,
+    HexadecimalCharacterReference,
+    DecimalCharacterReference,
+    NumericCharacterReferenceEnd,
 };

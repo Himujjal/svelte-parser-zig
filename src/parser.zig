@@ -50,13 +50,13 @@ pub const Parser = struct {
     tree: Tree,
     scannerInstance: Scanner,
 
-    parser_arena: *ArenaAllocator,
-    internal_allocator: Allocator,
-
     code: []const u8 = undefined,
     errors: ArrayList(Error),
     warnings: ArrayList(Error),
     options: ParserOptions,
+
+    parser_arena: *ArenaAllocator,
+    internal_allocator: Allocator,
 
     pub fn init(
         allocator: Allocator,
@@ -64,8 +64,8 @@ pub const Parser = struct {
         warnings: ArrayList(Error),
         options: ParserOptions,
     ) Self {
-        var a = try allocator.create(ArenaAllocator);
-        a.allocator()
+        var parser_arena = allocator.create(ArenaAllocator) catch unreachable;
+        parser_arena.* = ArenaAllocator.init(allocator);
 
         const scannerInstance = Scanner.init(
             allocator,
@@ -80,6 +80,9 @@ pub const Parser = struct {
             .errors = errors,
             .warnings = warnings,
             .options = options,
+
+            .parser_arena = parser_arena,
+            .internal_allocator = parser_arena.allocator(),
         };
     }
 
@@ -105,7 +108,13 @@ pub const Parser = struct {
         return self;
     }
 
+    pub fn deinitInternal(self: *Self) void {
+        self.parser_arena.deinit();
+        self.allocator.destroy(self.parser_arena);
+    }
+
     pub fn deinit(self: *Self) void {
+        self.deinitInternal();
         self.scannerInstance.deinit();
     }
 };
