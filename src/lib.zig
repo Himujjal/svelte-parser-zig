@@ -11,16 +11,8 @@ pub const Error = parser.Error;
 pub const ParserErrorType = parser.ParserErrorType;
 
 pub fn parseText(allocator: Allocator, text: []const u8, options: ParserOptions) Parser {
-    const errors = std.ArrayList(Error).init(allocator);
-    const warnings = std.ArrayList(Error).init(allocator);
-
-    const p = Parser.init(
-        allocator,
-        errors,
-        warnings,
-        options,
-    ).parse(text);
-
+    var _parser = Parser.init(allocator, options);
+    var p = Parser.parse(&_parser, text);
     return p.*;
 }
 

@@ -51,24 +51,28 @@ pub const Parser = struct {
     scannerInstance: Scanner,
 
     code: []const u8 = undefined,
-    errors: ArrayList(Error),
-    warnings: ArrayList(Error),
+    errors: *ArrayList(Error),
+    warnings: *ArrayList(Error),
+    tokens: *ArrayList(Token),
     options: ParserOptions,
 
     parser_arena: *ArenaAllocator,
     internal_allocator: Allocator,
 
-    pub fn init(
-        allocator: Allocator,
-        errors: ArrayList(Error),
-        warnings: ArrayList(Error),
-        options: ParserOptions,
-    ) Self {
+    pub fn init(allocator: Allocator, options: ParserOptions) Self {
         var parser_arena = allocator.create(ArenaAllocator) catch unreachable;
         parser_arena.* = ArenaAllocator.init(allocator);
 
+        var tokens = allocator.create(ArrayList(Token)) catch unreachable;
+        tokens.* = ArrayList(Token).init(allocator);
+        var errors = allocator.create(ArrayList(Error)) catch unreachable;
+        errors.* = ArrayList(Error).init(allocator);
+        var warnings = allocator.create(ArrayList(Error)) catch unreachable;
+        warnings.* = ArrayList(Error).init(allocator);
+
         const scannerInstance = Scanner.init(
             allocator,
+            tokens,
             errors,
             warnings,
         );
@@ -80,6 +84,7 @@ pub const Parser = struct {
             .errors = errors,
             .warnings = warnings,
             .options = options,
+            .tokens = tokens,
 
             .parser_arena = parser_arena,
             .internal_allocator = parser_arena.allocator(),
@@ -87,33 +92,25 @@ pub const Parser = struct {
     }
 
     pub fn parse(self: *Self, code: []const u8) *Self {
+        self.tokens.append(Token{ .start = 0, .end = 0 }) catch unreachable;
         const s = self.scannerInstance.scan(code);
-
-        var start = s.tokens.items[0].start;
-        var end = s.tokens.items[0].end;
-
-        std.debug.print(
-            "tokens:length: {d},{d},{d},{s},{s}\n",
-            .{
-                s.tokens.items.len,
-                s.tokens.items[0].end,
-                s.tokens.items[0].start,
-                code[start..end],
-                code,
-            },
-        );
-        self.scannerInstance.printTokens();
-        self.scannerInstance.testScan();
-        self.scannerInstance.deinitInternal();
+        s.printTokens();
+        s.testScan();
         return self;
     }
 
     pub fn deinitInternal(self: *Self) void {
         self.parser_arena.deinit();
         self.allocator.destroy(self.parser_arena);
+        self.allocator.destroy(self.errors);
+        self.allocator.destroy(self.warnings);
+        self.allocator.destroy(self.tokens);
     }
 
     pub fn deinit(self: *Self) void {
+        self.tokens.deinit();
+        self.errors.deinit();
+        self.warnings.deinit();
         self.deinitInternal();
         self.scannerInstance.deinit();
     }

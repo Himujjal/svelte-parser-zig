@@ -55,29 +55,30 @@ pub const Scanner = struct {
     const Self = @This();
 
     allocator: Allocator,
-    tokens: ArrayList(Token),
     code: []const u8 = undefined,
 
-    errors: ArrayList(Error),
-    warnings: ArrayList(Error),
+    tokens: *ArrayList(Token),
+    errors: *ArrayList(Error),
+    warnings: *ArrayList(Error),
 
-    i_aa: *ArenaAllocator,
-    i_all: Allocator,
+    scanner_arena: *ArenaAllocator,
+    internal_allocator: Allocator,
 
     pub fn init(
         allocator: Allocator,
-        errors: ArrayList(Error),
-        warnings: ArrayList(Error),
+        tokens: *ArrayList(Token),
+        errors: *ArrayList(Error),
+        warnings: *ArrayList(Error),
     ) Self {
-        var i_aa_wr = allocator.create(ArenaAllocator) catch unreachable;
-        i_aa_wr.* = ArenaAllocator.init(allocator);
+        var scanner_arena = allocator.create(ArenaAllocator) catch unreachable;
+        scanner_arena.* = ArenaAllocator.init(allocator);
 
         return Self{
             .allocator = allocator,
-            .tokens = ArrayList(Token).init(allocator),
+            .tokens = tokens,
             .errors = errors,
-            .i_aa = i_aa_wr,
-            .i_all = i_aa_wr.allocator(),
+            .scanner_arena = scanner_arena,
+            .internal_allocator = scanner_arena.allocator(),
             .warnings = warnings,
         };
     }
@@ -95,27 +96,28 @@ pub const Scanner = struct {
 
     // Only for debugging purposes
     pub fn printTokens(self: *Self) void {
-        std.debug.print("\n", .{});
         for (self.tokens.items) |token| {
-            _ = token.toString(self.i_all, self.code);
+            _ = token.toString(self.internal_allocator, self.code);
         }
     }
 
     pub fn testScan(self: *Self) void {
+        std.debug.print("\n========= TOKENS ===========\nToken length: {d}\n", .{self.tokens.items.len});
         for (self.tokens.items) |token| {
-            std.debug.print("\t{s}\t", .{
-                token.toString(self.i_all, self.code),
+            std.debug.print("{s}\n", .{
+                token.toString(self.internal_allocator, self.code),
             });
         }
+        std.debug.print("====================\n", .{});
     }
 
     pub fn deinitInternal(self: *Self) void {
-        self.i_aa.deinit();
-        self.allocator.destroy(self.i_aa);
+        self.scanner_arena.deinit();
+        self.allocator.destroy(self.scanner_arena);
     }
 
     pub fn deinit(self: *Self) void {
-        self.tokens.deinit();
+        self.deinitInternal();
     }
 };
 

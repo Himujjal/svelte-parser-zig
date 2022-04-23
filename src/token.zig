@@ -2,7 +2,18 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const HashMapUnManaged = std.HashMapUnmanaged;
 
-const TokenPosition = struct { start: usize, end: usize };
+const TokenPosition = struct {
+    start: usize,
+    end: usize,
+
+    pub fn getStringFromTokenPosition(pos: TokenPosition, code: []const u8) []const u8 {
+        return str[pos.start..pos.end];
+    }
+
+    pub fn eql(lhs: TokenPosition, rhs: TokenPosition, code: []const u8) bool {
+        return std.mem.eql(u8, getStringFromTokenPosition(lhs), getStringFromTokenPosition(rhs));
+    }
+};
 
 pub const TokenDOCTYPE = struct {
     name: ?TokenPosition, // html, xml
@@ -57,77 +68,68 @@ pub const Token = union(enum) {
     pub fn copy(self: Token, allocator: Allocator) !Token {
         switch (self) {
             .doctype => |d| {
-                const name = if (d.name) |s| try allocator.dupe(u8, s) else null;
-                errdefer if (name) |s| allocator.free(s);
-                const public_identifier = if (d.public_identifier) |s| try allocator.dupe(u8, s) else null;
-                errdefer if (public_identifier) |s| allocator.free(s);
-                const system_identifier = if (d.system_identifier) |s| try allocator.dupe(u8, s) else null;
-                errdefer if (system_identifier) |s| allocator.free(s);
-                return Token{ .doctype = .{
-                    .name = name,
-                    .public_identifier = public_identifier,
-                    .system_identifier = system_identifier,
-                    .force_quirks = d.force_quirks,
-                } };
+                return Token{
+                    .doctype = .{
+                        .name = d.name,
+                        .public_identifier = d.public_identifier,
+                        .system_identifier = d.system_identifier,
+                        .force_quirks = d.force_quirks,
+                    },
+                };
             },
             .start_tag => |st| {
-                const name = try allocator.dupe(u8, st.name);
-                errdefer allocator.free(name);
-
+                const name = st.name;
                 var attributes = TokenStartTag.Attributes{};
                 errdefer {
-                    var iterator = attributes.iterator();
-                    while (iterator.next()) |attr| {
-                        allocator.free(attr.key_ptr.*);
-                        allocator.free(attr.value_ptr.*);
-                    }
                     attributes.deinit(allocator);
                 }
 
                 var iterator = st.attributes.iterator();
                 while (iterator.next()) |attr| {
-                    const key = try allocator.dupe(u8, attr.key_ptr.*);
-                    errdefer allocator.free(key);
-                    const value = try allocator.dupe(u8, attr.value_ptr.*);
-                    errdefer allocator.free(value);
+                    const key = attr.key_ptr.*;
+                    const value = attr.value_ptr.*;
                     try attributes.putNoClobber(allocator, key, value);
                 }
 
-                return Token{ .start_tag = .{ .name = name, .attributes = attributes, .self_closing = st.self_closing } };
+                return Token{ .start_tag = .{
+                    .name = name,
+                    .attributes = attributes,
+                    .self_closing = st.self_closing,
+                } };
             },
             .end_tag => |et| {
-                const name = try allocator.dupe(u8, et.name);
-                return Token{ .end_tag = .{ .name = name } };
+                return Token{ .end_tag = .{ .name = et.name } };
             },
             .comment => |c| {
-                const data = try allocator.dupe(u8, c.data);
-                return Token{ .comment = .{ .data = data } };
+                return Token{ .comment = .{ .data = c.data } };
             },
             .character, .eof => return self,
         }
     }
 
-    pub fn eql(lhs: Token, rhs: Token) bool {
+    pub fn eql(lhs: Token, rhs: Token, code: []const u8) bool {
         const eqlNullSlices = rem.util.eqlNullSlices;
         if (std.meta.activeTag(lhs) != std.meta.activeTag(rhs)) return false;
         switch (lhs) {
             .doctype => return lhs.doctype.force_quirks == rhs.doctype.force_quirks and
-                eqlNullSlices(u8, lhs.doctype.name, rhs.doctype.name) and
-                eqlNullSlices(u8, lhs.doctype.public_identifier, rhs.doctype.public_identifier) and
-                eqlNullSlices(u8, lhs.doctype.system_identifier, rhs.doctype.system_identifier),
+                TokenPosition.eql(lhs.doctype.name, rhs.doctype.name, code) and
+                TokenPosition.eql(lhs.doctype.public_identifier, rhs.doctype.public_identifier, code) and
+                TokenPosition.eql(lhs.doctype.system_identifier, rhs.doctype.system_identifier, code),
             .start_tag => {
-                if (!(lhs.start_tag.self_closing == rhs.start_tag.self_closing and
-                    eqlNullSlices(u8, lhs.start_tag.name, rhs.start_tag.name) and
-                    lhs.start_tag.attributes.count() == rhs.start_tag.attributes.count())) return false;
+                if (!(lhs.start_tag.self_closing == rhs.start_tag.self_closing)) return false;
+                if (!TokenPosition.eql(lhs.start_tag.name, rhs.start_tag.name, code)) return false;
+                if (lhs.start_tag.attributes.count() != rhs.start_tag.attributes.count()) return false;
+
                 var iterator = lhs.start_tag.attributes.iterator();
                 while (iterator.next()) |attr| {
                     const rhs_value = rhs.start_tag.attributes.get(attr.key_ptr.*) orelse return false;
-                    if (!std.mem.eql(u8, attr.value_ptr.*, rhs_value)) return false;
+                    const rhs_str = TokenPosition.getStringFromTokenPosition(rhs_value);
+                    if (!std.mem.eql(u8, TokenPosition.eql(attr.value_ptr.*), rhs_str)) return false;
                 }
                 return true;
             },
-            .end_tag => return eqlNullSlices(u8, lhs.end_tag.name, rhs.end_tag.name),
-            .comment => return eqlNullSlices(u8, lhs.comment.data, rhs.comment.data),
+            .end_tag => return eqlNullSlices(u8, TokenPosition.eql(lhs.end_tag.name), TokenPosition.eql(rhs.end_tag.name)),
+            .comment => return eqlNullSlices(u8, TokenPosition.eql(lhs.comment.data), TokenPosition.eql(rhs.comment.data)),
             .character => return lhs.character.data == rhs.character.data,
             .eof => return true,
         }
