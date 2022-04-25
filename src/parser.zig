@@ -1,14 +1,15 @@
 const std = @import("std");
 const scanner = @import("./scanner.zig");
+const __token = @import("./token.zig");
 
 const expect = std.testing.expect;
 const Allocator = std.mem.Allocator;
 const ArenaAllocator = std.heap.ArenaAllocator;
 const ArrayList = std.ArrayList;
 
-const TokenType = scanner.TokenType;
+const TokenType = __token.TokenType;
 const Scanner = scanner.Scanner;
-const Token = scanner.Token;
+const Token = __token.Token;
 
 pub const ParserErrorType = enum {
     MissingSemiColon,
@@ -16,6 +17,7 @@ pub const ParserErrorType = enum {
 
 pub const Error = struct {
     line: usize,
+    col: usize,
     startPosition: usize,
     endPosition: usize,
     errorMessage: []const u8,
@@ -40,6 +42,84 @@ pub const Tree = struct {
         \\      Text
         \\          Hello Svelte
         ;
+    }
+};
+
+pub const ParseError = enum {
+    SurrogateInInputStream,
+    NoncharacterInInputStream,
+    ControlCharacterInInputStream,
+    UnexpectedNullCharacter,
+    UnexpectedQuestionMarkInsteadOfTagName,
+    EOFBeforeTagName,
+    InvalidFirstCharacterOfTagName,
+    MissingEndTagName,
+    EOFInTag,
+    EOFInScriptHtmlCommentLikeText,
+    UnexpectedEqualsSignBeforeAttributeName,
+    UnexpectedCharacterInAttributeName,
+    MissingAttributeValue,
+    UnexpectedCharacterInUnquotedAttributeValue,
+    MissingWhitespaceBetweenAttributes,
+    UnexpectedSolidusInTag,
+    EndTagWithAttributes,
+    EndTagWithTrailingSolidus,
+    CDATAInHtmlContent,
+    IncorrectlyOpenedComment,
+    AbruptClosingOfEmptyComment,
+    EOFInComment,
+    NestedComment,
+    IncorrectlyClosedComment,
+    EOFInDOCTYPE,
+    MissingWhitespaceBeforeDOCTYPEName,
+    MissingDOCTYPEName,
+    InvalidCharacterSequenceAfterDOCTYPEName,
+    MissingWhitespaceAfterDOCTYPEPublicKeyword,
+    MissingDOCTYPEPublicIdentifier,
+    MissingQuoteBeforeDOCTYPEPublicIdentifier,
+    AbruptDOCTYPEPublicIdentifier,
+    MissingWhitespaceBetweenDOCTYPEPublicAndSystemIdentifiers,
+    MissingQuoteBeforeDOCTYPESystemIdentifier,
+    MissingWhitespaceAfterDOCTYPESystemKeyword,
+    MissingDOCTYPESystemIdentifier,
+    AbruptDOCTYPESystemIdentifier,
+    UnexpectedCharacterAfterDOCTYPESystemIdentifier,
+    EOFInCDATA,
+    MissingSemicolonAfterCharacterReference,
+    UnknownNamedCharacterReference,
+    AbsenceOfDigitsInNumericCharacterReference,
+    NullCharacterReference,
+    CharacterReferenceOutsideUnicodeRange,
+    SurrogateCharacterReference,
+    NoncharacterCharacterReference,
+    ControlCharacterReference,
+    DuplicateAttribute,
+
+    NonVoidHtmlElementStartTagWithTrailingSolidus,
+    TreeConstructionError,
+};
+
+pub const ErrorHandler = union(enum) {
+    ignore,
+    abort: ?ParseError,
+    report: ArrayList(ParseError),
+
+    pub fn sendError(self: *@This(), err: ParseError) !void {
+        switch (self.*) {
+            .ignore => {},
+            .abort => |*the_error| {
+                the_error.* = err;
+                return error.AbortParsing;
+            },
+            .report => |*list| try list.append(err),
+        }
+    }
+
+    pub fn deinit(self: *@This()) void {
+        switch (self.*) {
+            .ignore, .abort => {},
+            .report => |list| list.deinit(),
+        }
     }
 };
 
@@ -92,10 +172,8 @@ pub const Parser = struct {
     }
 
     pub fn parse(self: *Self, code: []const u8) *Self {
-        self.tokens.append(Token{ .start = 0, .end = 0 }) catch unreachable;
         const s = self.scannerInstance.scan(code);
-        s.printTokens();
-        s.testScan();
+        _ = s;
         return self;
     }
 
@@ -115,7 +193,3 @@ pub const Parser = struct {
         self.scannerInstance.deinit();
     }
 };
-
-test "" {
-    try expect(1 == 1);
-}

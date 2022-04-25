@@ -23,7 +23,7 @@ pub fn build(b: *std.build.Builder) void {
 
     buildExe(b, mode);
 
-    const main_tests = b.addTest("src/lib.zig");
+    const main_tests = b.addTest("src/scanner.zig");
     main_tests.setBuildMode(mode);
 
     const test_step = b.step("test", "Run library tests");
